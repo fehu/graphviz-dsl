@@ -2,6 +2,7 @@ package feh.dsl.graphviz
 
 import feh.util._
 import feh.util.PrintIndents._
+import scala.collection.mutable
 
 trait GraphvizDsl{
   trait Elem{
@@ -81,18 +82,17 @@ trait GraphvizDsl{
 
   trait AnyEdge extends Elem
 
-  case class Edge(n1: Elem, n2: Elem, attrs: Set[EdgeAttr[_]] = Set())
-                 (implicit writer: EdgeWriter) extends AnyEdge{
+  case class Edge(n1: Elem, n2: Elem, attrs: Set[EdgeAttr[_]] = Set()) extends AnyEdge{
 
     override def isEdge = true
 
-    def value = writer.write(this)
+    def value = edgeWriter.write(this)
 
     def printValue = value
   }
 
   protected case class LongEdge(start: Elem, end: Elem, all: Seq[Elem]) extends AnyEdge{
-    def value = all.mkString(" -> ")
+    def value = edgeWriter.write(this)
 
     def attrs = Set()
 
@@ -100,8 +100,10 @@ trait GraphvizDsl{
   }
 
   trait EdgeWriter{
-    def write(edge: Edge): String
+    def write(edge: AnyEdge): String
   }
+
+  def edgeWriter: EdgeWriter
 
   case class Graph(name: String, elems: Seq[Elem], attrs: Set[GraphAttr[_]] = Set()) extends Elem{
     def value: String = ??? // shouldn't be used as graph is multi-line
@@ -129,8 +131,8 @@ trait GraphvizDsl{
   def write: Writer
 }
 
-trait GraphvizDslDefaultWriter extends GraphvizDsl{
-
+trait GraphvizDslDefaultWriter{
+  self: GraphvizDsl =>
 
   override def write: DefaultWriter
 
@@ -146,6 +148,7 @@ trait GraphvizDslDefaultWriter extends GraphvizDsl{
 
     def surroundGraph(gr: Graph)(body: => Unit)(implicit p: Param){
       printlni(s"$graphKey ${gr.name} {")
+      printlni("")
       nextDepth(body)
       printlni("}")
     }
@@ -174,10 +177,42 @@ trait GraphvizDslDefaultWriter extends GraphvizDsl{
       }.flatten.toSet.span(_.attrs.isEmpty)
 
       if(attrLess.nonEmpty) printlni(attrLess.mkString("", "; ", "\n"))
-      if(withAttrs.nonEmpty) printlni(withAttrs.map(_.value).mkString("\n", ";\n", ";\n"))
+      if(withAttrs.nonEmpty) withAttrs.map(_.value) foreach printlni
     }
 
-    def chainEdges(edges: Seq[Edge]): Seq[AnyEdge]
+    def maxChainLength = 20
+    
+    def chainEdges(edges: Seq[Edge]): Seq[AnyEdge] = {
+      val buff = mutable.Buffer(edges.map(edge => LongEdge(edge.n1, edge.n2, edge.n1 :: edge.n2 :: Nil)): _*)
+
+      def update(old1: LongEdge, old2: LongEdge, le: LongEdge){
+        buff -= old1
+        buff -= old2
+        buff += le
+      }
+
+      import scala.util.control.Breaks._
+
+      def fbuff = buff.filter(_.all.length != maxChainLength)
+      
+      def doChaining: Unit =
+        tryBreakable {
+          for(edge <- fbuff) edge match {
+            case LongEdge(_, _, all) if all.length == maxChainLength => // nothing
+            case x@LongEdge(start, end, all) =>
+              fbuff.find(le => le.start == end).map{
+                le => update(le, x, le.copy(start = start, all = all ++ le.all.drop(1)))
+              } orElse fbuff.find(le => le.end == start).map{
+                le => le.copy(end = end, all = le.all ++ all.drop(1))
+              }
+            case null =>
+              break()
+          }
+        } catchBreak { doChaining }
+
+      doChaining
+      buff.toSeq
+    }
 
     def edgeSeq(edge: Edge): Seq[Edge] = edge match{
       case edg@Edge(e1: Edge, e2: Edge, _) => edgeSeq(e1) ++ Seq(edg) ++ edgeSeq(e2)
@@ -191,9 +226,8 @@ trait GraphvizDslDefaultWriter extends GraphvizDsl{
       val edges = gr.elems.collect{case e: Edge => e}.flatMap(edgeSeq)
 
       val (noAttrs, withAttrs) = edges.span(_.attrs.isEmpty)
-      val ch = chainEdges(noAttrs)
-      println(s"elems=${gr.elems}\nedges=$edges\nnoAttrs=$noAttrs\nch=$ch")
-      ch map (e => printlni(e.value + ";"))
+      val chained = chainEdges(noAttrs)
+      chained map {e => printlni(e.value + ";")}
       if(withAttrs.nonEmpty) printlni(withAttrs.map(_.value).mkString("", ";\n", ";"))
     }
 
@@ -207,7 +241,8 @@ trait GraphvizDslDefaultWriter extends GraphvizDsl{
   trait DefaultEdgeWriter extends EdgeWriter{
     def edgeSymb: String
 
-    def write(edge: Edge) = edge match{
+    def write(edge: AnyEdge) = edge match{
+      case LongEdge(_, _, all) => all.map(elemToStr).mkString(s" $edgeSymb ")
       case Edge(n1, n2, _) => elemToStr(n1) + " " + edgeSymb + " " + elemToStr(n2)
     }
 

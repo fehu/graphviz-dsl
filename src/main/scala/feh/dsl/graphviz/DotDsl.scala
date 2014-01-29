@@ -1,48 +1,16 @@
 package feh.dsl.graphviz
 
 import feh.util.PrintIndents.Param
-import scala.collection.mutable
 
-trait DotDsl extends GraphvizDslDefaultWriter{
+trait DotDsl extends GraphvizDsl with GraphvizDslDefaultWriter{
 
   override def write: DotWriter
 
   trait DotWriter extends DefaultWriter{
     def graphKey(implicit p: Param) = if(p.depth == 0) "digraph" else "subgraph"
-
-
-    def chainEdges(edges: Seq[Edge]): Seq[AnyEdge] = {
-      val buff = mutable.Buffer(edges.map(edge => LongEdge(edge.n1, edge.n2, edge.n1 :: edge.n2 :: Nil)): _*)
-
-      def update(old1: LongEdge, old2: LongEdge, le: LongEdge){
-        buff -= old1
-        buff -= old2
-        buff += le
-      }
-
-      import scala.util.control.Breaks._
-
-      def doChaining: Unit =
-        tryBreakable {
-          for(edge <- buff) edge match {
-            case x@LongEdge(start, end, all) =>
-              buff.find(le => le.start == end).map{
-                le => update(le, x, le.copy(start = start, all = all ++ le.all.drop(1)))
-              } orElse buff.find(le => le.end == start).map{
-                le => le.copy(end = end, all = le.all ++ all.drop(1))
-              }
-            case null =>
-              break()
-          }
-        } catchBreak { doChaining }
-
-      doChaining
-      buff.toSeq
-    }
-
   }
 
-  implicit class DotElemWrapper(elem: Elem)(implicit wr: EdgeWriter){
+  implicit class DotElemWrapper(elem: Elem){
     def -> (el: Elem) = Edge(elem, el)
   }
 }
@@ -52,7 +20,7 @@ class DotDslImpl(_defaultIndent: Int) extends DotDsl{
     def defaultIndent = _defaultIndent
   }
 
-  implicit val edgeWriter: EdgeWriter = new DefaultEdgeWriter {
+  val edgeWriter = new DefaultEdgeWriter {
     def edgeSymb = "->"
   }
 }
