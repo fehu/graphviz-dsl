@@ -58,14 +58,18 @@ trait GraphvizDsl{
   case class ScopeEdgeAttr[T](attrs: Set[EdgeAttr[T]])    extends ScopeAttr[EdgeAttr[T]]{ def tpe = "edge"}
 
   object Attributes{
-    abstract class StringAttr(key: String, value: String) extends AttrImpl[String](key, value, s => Option(s).map(x => "\"" + x + "\""))
+    abstract class StringAttr(key: String, value: String) extends AttrImpl[String](key, value, s => Option(s).map(_.quoted))
     abstract class IntAttr(key: String, value: Int) extends AttrImpl[Int](key, value, _.toString |> Some.apply)
 
+    case class Id(id: String) extends StringAttr("id", id) with NodeAttr[String] with EdgeAttr[String] with GraphAttr[String]
     case class Label(text: String) extends StringAttr("label", text) with NodeAttr[String] with EdgeAttr[String] with GraphAttr[String]
     case class Tooltip(text: String) extends StringAttr("tooltip", text) with NodeAttr[String] with EdgeAttr[String] with GraphAttr[String]
-
     case class Font(name: String) extends StringAttr("fontname", name) with NodeAttr[String] with EdgeAttr[String] with GraphAttr[String]
     case class FontSize(size: Int) extends IntAttr("fontsize", size) with NodeAttr[Int] with EdgeAttr[Int] with GraphAttr[Int]
+    case class Color(color: java.awt.Color) extends AttrImpl[java.awt.Color]("color", color, Option(_) map (_.hexRGB.quoted))
+      with NodeAttr[java.awt.Color] with EdgeAttr[java.awt.Color] with GraphAttr[java.awt.Color]
+
+    case object Fill extends StringAttr("style", "filled") with NodeAttr[String]
     // todo
   }
 

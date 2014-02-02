@@ -8,6 +8,7 @@ trait GraphvizExec extends ExecUtils with FileUtils{
   def execGraphviz(path: Path)(implicit format: OutFormat, prog: Prog) {
     execGraphviz(path, path.file.name.dropRight(path.ext.length |> (l => if(l==0) 0 else l+1)))
   }
+
   def execGraphviz(path: Path, name: String)(implicit format: OutFormat, prog: Prog) {
     val dir = Option(path.file.getParent) getOrElse "."
     execGraphviz(path, Path(dir + separator + name + "." + format.suffix))
@@ -16,6 +17,12 @@ trait GraphvizExec extends ExecUtils with FileUtils{
   def execGraphviz(in: Path, out: Path)(implicit format: OutFormat, prog: Prog){
     exec(graphvizDirPath.map(_.toString + separator).getOrElse("") + prog.command, "-T" + format.graphvizTparam, s"-o$out", in)
       .waitFor()
+  }
+
+  def readGraphviz(path: Path)(implicit format: OutFormat, prog: Prog): String = {
+    val pr = redirectingStreams(exec(graphvizDirPath.map(_.toString + separator).getOrElse("") + prog.command, "-T" + format.graphvizTparam, path))
+    pr.waitFor()
+    File.read[String](pr.getInputStream)
   }
 
   def writeAndExec(path: Path, contents: String)(implicit format: OutFormat, prog: Prog){
