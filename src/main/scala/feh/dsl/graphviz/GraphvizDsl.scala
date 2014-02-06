@@ -186,7 +186,7 @@ trait GraphvizDslDefaultWriter{
 
     def maxChainLength = 20
     
-    def chainEdges(edges: Seq[Edge]): Seq[AnyEdge] = {
+    def chainEdges(edges: Seq[Edge]): Seq[AnyEdge] = edges.toList /*{
       val buff = mutable.Buffer(edges.map(edge => LongEdge(edge.n1, edge.n2, edge.n1 :: edge.n2 :: Nil)): _*)
 
       def update(old1: LongEdge, old2: LongEdge, le: LongEdge){
@@ -217,12 +217,13 @@ trait GraphvizDslDefaultWriter{
       doChaining
       buff.toSeq
     }
+*/
 
     def edgeSeq(edge: Edge): Seq[Edge] = edge match{
       case edg@Edge(e1: Edge, e2: Edge, _) => edgeSeq(e1) ++ Seq(edg) ++ edgeSeq(e2)
-      case edg@Edge(e: Edge, _, _) => e +: edgeSeq(e)
-      case edg@Edge(_, e: Edge, _) => edgeSeq(e) :+ e
-      case e: Edge => Seq(e)
+      case edg@Edge(e: Edge, _, _) => edg +: edgeSeq(e)
+      case edg@Edge(_, e: Edge, _) => edgeSeq(e) :+ edg
+      case edg: Edge => Seq(edg)
       case _ => Nil
     }
 
