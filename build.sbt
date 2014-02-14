@@ -1,6 +1,6 @@
 import Build.Dependencies._
 
-name := "graphviz-dsl"
+name := "graphviz" //-dsl
 
 version := "0.1"
 
