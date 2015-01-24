@@ -2,7 +2,6 @@ package feh.dsl.graphviz
 
 import feh.util._
 import feh.util.PrintIndents._
-import scala.collection.mutable
 
 trait GraphvizDsl{
   trait Elem{
@@ -60,7 +59,13 @@ trait GraphvizDsl{
   object Attributes{
     abstract class StringAttr(key: String, value: String) extends AttrImpl[String](key, value, s => Option(s).map(_.quoted))
     abstract class IntAttr(key: String, value: Int) extends AttrImpl[Int](key, value, _.toString |> Some.apply)
+    abstract class BoolAttr(key: String, value: Boolean) extends AttrImpl[Boolean](key, value, _.toString |> Some.apply)
 
+    protected [graphviz] abstract class StubGraphAttr[T](val key: String) extends GraphAttr[T]{
+      def stringValue = _ => None
+      def value = ???
+    }
+    
     case class Id(id: String) extends StringAttr("id", id) with NodeAttr[String] with EdgeAttr[String] with GraphAttr[String]
     case class Label(text: String) extends StringAttr("label", text) with NodeAttr[String] with EdgeAttr[String] with GraphAttr[String]
     case class Tooltip(text: String) extends StringAttr("tooltip", text) with NodeAttr[String] with EdgeAttr[String] with GraphAttr[String]
@@ -69,17 +74,42 @@ trait GraphvizDsl{
     case class Color(color: java.awt.Color) extends AttrImpl[java.awt.Color]("color", color, Option(_) map (_.hexRGB.quoted))
       with NodeAttr[java.awt.Color] with EdgeAttr[java.awt.Color] with GraphAttr[java.awt.Color]
 
-    case object Fill extends StringAttr("style", "filled") with NodeAttr[String]
+    case object fill extends StringAttr("style", "filled") with NodeAttr[String] with GraphAttr[String]
+    case object compound extends BoolAttr("compound", true) with GraphAttr[Boolean]
+
+    case object autoLabel extends StubGraphAttr[String]("label")
+    case object cluster extends StubGraphAttr[Nothing](null)
+
     // todo
+    implicit class AttributeBuilder(name: String){
+      trait AllAttr[T] extends GraphAttr[T] with NodeAttr[T] with EdgeAttr[T]
+
+      def :=(value: String) = new StringAttr(name, value) with AllAttr[String]
+      def :=(value: Int)    = new IntAttr(name, value) with AllAttr[Int]
+    }
+  }
+  def attr = Attributes
+
+  protected[graphviz] class ByNameElem(val name: String) extends Elem{
+    def value = ???
+    def attrs: Set[_ <: Attribute[_]] = ???
+    def printValue: String = name.quoted
+  }
+
+  def Node(name: String, attrs: NodeAttr[_]*): Node = Node(name, attrs.toSet)
+
+  implicit class NodeBuilder(name: String){
+    def :|(attrs: NodeAttr[_]*) = Node(name, attrs.toSet)
+    def node = Node(name)
   }
 
   case class Node(name: String, attrs: Set[NodeAttr[_]] = Set()) extends Elem{
-    def value: String = name + (
+    def value: String = printValue + (
       if(attrs.isEmpty) ""
       else attrs.mkString(" [", " ", "]")
       )
 
-    def printValue = name
+    def printValue = name.quoted
 
     override def isNode = true
   }
@@ -109,10 +139,17 @@ trait GraphvizDsl{
 
   def edgeWriter: EdgeWriter
 
-  case class Graph(name: String, elems: Seq[Elem], attrs: Set[GraphAttr[_]] = Set()) extends Elem{
-    def value: String = ??? // shouldn't be used as graph is multi-line
-    def printValue = name
+  def Graph(name: String, attrs: GraphAttr[_]*)(elems: Elem*) = new Graph(name, elems, attrs.toSet)
+  def Cluster(name: String, attrs: GraphAttr[_]*)(elems: Elem*) = new Graph(name, elems, attrs.toSet + Attributes.cluster)
+
+  class Graph(val name: String, val elems: Seq[Elem], val attrs: Set[GraphAttr[_]]) extends Elem
+  {
+    def value: String = sys.error("shouldn't be used as graph is multi-line")
+    private def namePrefix = if(attrs.contains(Attributes.cluster)) "cluster " else ""
+    def printValue = (namePrefix + name).quoted
     override def isGraph = true
+
+    def asRoot = new Graph(name, elems, attrs) with Root
   }
 
   trait Root extends Graph{
@@ -128,8 +165,8 @@ trait GraphvizDsl{
   trait Writer{
     def defaultIndent: Int
 
-    def root(gr: Root): String
-    def graph(gr: Graph)(implicit p: Param)
+    protected[graphviz] def root(gr: Root): String
+    def graph(gr: Graph)(implicit p: Param = null): String
   }
 
   def write: Writer
@@ -141,33 +178,50 @@ trait GraphvizDslDefaultWriter{
   override def write: DefaultWriter
 
   trait DefaultWriter extends Writer{
-    def graphKey(implicit p: Param): String
+    protected[graphviz] def graphKey(implicit p: Param): String
 
-    def attrsOneLine(elem: Elem): String = elem match {
-      case Node(_, attrs) => "node " + attrsOneLine(attrs)
+//    protected[graphviz] def attrsOneLine(elem: Elem): String = elem match {
+//      case Node(_, attrs) => "node " + attrsOneLine(attrs)
+//    }
+
+    protected[graphviz] def stubGraphAttr(attr: Attributes.StubGraphAttr[_], graph: Graph) = attr match {
+      case Attributes.autoLabel     => Some(Attributes.Label(graph.name))
+      case Attributes.`cluster`  => None
     }
 
-    def attrsOneLine(attrs: Set[_ <: Attribute[_]]): String =
-      if(attrs.isEmpty) "" else attrs.mkString("[ " + "; " + " ]").filterNot('\n' ==)
+    protected[graphviz] def graphAttrs(attrs: Set[_ <: Attribute[_]], graph: Graph)(implicit p: Param) =
+      if(attrs.nonEmpty) {
+        attrs
+          .flatMap {
+            case stub: Attributes.StubGraphAttr[_] => stubGraphAttr(stub, graph)
+            case other => Some(other)
+          }
+          .map(attr => printlni(attr + ";"))
+        printlni("")
+      }
 
-    def surroundGraph(gr: Graph)(body: => Unit)(implicit p: Param){
-      printlni(s"$graphKey ${gr.name} {")
+    protected[graphviz] def surroundGraph(gr: Graph)(body: => Unit)(implicit p: Param){
       printlni("")
+      printlni(s"$graphKey ${gr.printValue} {")
       nextDepth(body)
       printlni("}")
     }
 
-    def graph(gr: Graph)(implicit p: Param){
-      surroundGraph(gr){
-        nodes(gr)
-        edges(gr)
-        gr.elems.collect{
-          case g: Graph => graph(g)
+    def graph(gr: Graph)(implicit p: Param = null) =
+      if(p == null) root(gr.asRoot)
+      else {
+        surroundGraph(gr){
+          graphAttrs(gr.attrs, gr)
+          nodes(gr)
+          edges(gr)
+          gr.elems.collect{
+            case g: Graph => graph(g)
+          }
         }
+        null
       }
-    }
 
-    def nodes(gr: Graph)(implicit p: Param){
+    protected[graphviz] def nodes(gr: Graph)(implicit p: Param){
       def extractEdgeNodes: Edge => Set[Node] = {
         case Edge(n1: Node, n2: Node, _) => Set(n1, n2)
         case Edge(e: Edge, n: Node, _) => extractEdgeNodes(e) + n
@@ -180,13 +234,14 @@ trait GraphvizDslDefaultWriter{
         case e: Edge => extractEdgeNodes(e)
       }.flatten.toSet.span(_.attrs.isEmpty)
 
-      if(attrLess.nonEmpty) printlni(attrLess.mkString("", "; ", "\n"))
-      if(withAttrs.nonEmpty) withAttrs.map(_.value) foreach printlni
+      if(attrLess.nonEmpty) printlni(attrLess.mkString("", "; ", ";"))
+      if(withAttrs.nonEmpty) withAttrs.map(_.value + ";") foreach printlni
+      if(attrLess.nonEmpty && withAttrs.nonEmpty) printlni("")
     }
 
-    def maxChainLength = 20
-    
-    def chainEdges(edges: Seq[Edge]): Seq[AnyEdge] = edges.toList /*{
+    protected[graphviz] def maxChainLength = 20
+
+    protected[graphviz] def chainEdges(edges: Seq[Edge]): Seq[AnyEdge] = edges.toList /*{
       val buff = mutable.Buffer(edges.map(edge => LongEdge(edge.n1, edge.n2, edge.n1 :: edge.n2 :: Nil)): _*)
 
       def update(old1: LongEdge, old2: LongEdge, le: LongEdge){
@@ -219,7 +274,7 @@ trait GraphvizDslDefaultWriter{
     }
 */
 
-    def edgeSeq(edge: Edge): Seq[Edge] = edge match{
+    protected[graphviz] def edgeSeq(edge: Edge): Seq[Edge] = edge match{
       case edg@Edge(e1: Edge, e2: Edge, _) => edgeSeq(e1) ++ Seq(edg) ++ edgeSeq(e2)
       case edg@Edge(e: Edge, _, _) => edg +: edgeSeq(e)
       case edg@Edge(_, e: Edge, _) => edgeSeq(e) :+ edg
@@ -227,7 +282,7 @@ trait GraphvizDslDefaultWriter{
       case _ => Nil
     }
 
-    def edges(gr: Graph)(implicit p: Param){
+    protected[graphviz] def edges(gr: Graph)(implicit p: Param){
       val edges = gr.elems.collect{case e: Edge => e}.flatMap(edgeSeq)
 
       val (noAttrs, withAttrs) = edges.span(_.attrs.isEmpty)
@@ -236,7 +291,7 @@ trait GraphvizDslDefaultWriter{
       if(withAttrs.nonEmpty) printlni(withAttrs.map(_.value).mkString("", ";\n", ";"))
     }
 
-    def root(gr: Root) = {
+    protected[graphviz] def root(gr: Root) = {
       implicit val b = newBuilder(defaultIndent)
       graph(gr)
       b.mkString
@@ -247,14 +302,15 @@ trait GraphvizDslDefaultWriter{
     def edgeSymb: String
 
     def write(edge: AnyEdge) = edge match{
-      case LongEdge(_, _, all) => all.map(elemToStr).mkString(s" $edgeSymb ")
-      case Edge(n1, n2, _) => elemToStr(n1) + " " + edgeSymb + " " + elemToStr(n2)
+      case LongEdge(_, _, all) => all.map(_.printValue).mkString(s" $edgeSymb ")
+      case Edge(n1, n2, _) => n1.printValue + " " + edgeSymb + " " + n2.printValue
     }
 
-    protected def elemToStr(elem: Elem): String = elem match{
-      case Node(name, _) => name
-      case Graph(name, _, _) => name
-      case e: Edge => e.value
-    }
+//    protected def elemToStr(elem: Elem): String = elem match{
+//      case byName: ByNameElem => byName.name.quoted
+//      case n: Node => n.printValue
+//      case g: Graph => g.printValue
+//      case e: Edge => e.value
+//    }
   }
 }

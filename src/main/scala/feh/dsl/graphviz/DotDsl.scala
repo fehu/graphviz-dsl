@@ -10,8 +10,20 @@ trait DotDsl extends GraphvizDsl with GraphvizDslDefaultWriter{
     def graphKey(implicit p: Param) = if(p.depth == 0) "digraph" else "subgraph"
   }
 
-  implicit class DotElemWrapper(elem: Elem){
-    def -> (el: Elem) = Edge(elem, el)
+  implicit class DotElemWrapper(elem: Node){
+    def -> (to: Node)   = Edge(elem, to)
+    def -> (to: String) = Edge(elem, new ByNameElem(to))
+  }
+
+//  implicit class DotElemWrapper(elem: Elem){
+//    def -> (to: Elem) = Edge(elem, to)
+//    def -> (to: String) = Edge(elem, new ByNameElem(to))
+//  }
+
+  implicit class DotByNameElemWrapper(name: String){
+    def -> (to: String) = Edge(new ByNameElem(name), new ByNameElem(to))
+    def -> (to: Node) = Edge(new ByNameElem(name), to)
+//    def -> (to: Elem) = Edge(new ByNameElem(name), to)
   }
 }
 
