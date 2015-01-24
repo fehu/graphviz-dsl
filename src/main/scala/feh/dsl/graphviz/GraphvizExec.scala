@@ -8,13 +8,8 @@ object GraphvizExec extends ExecUtils{
     val file = path.file
     val dir = Option(file.getParent) getOrElse "."
     val outName = path.splittedName._1 + "." + format.suffix
-    graphviz(path, dir / outName) //path.file.name.dropRight(path.ext.length |> (l => if(l==0) 0 else l+1))
+    graphviz(path, dir / outName)
   }
-
-//  def graphviz(path: Path, name: String)(implicit format: OutFormat, prog: Prog) {
-//    val dir = Option(path.file.getParent) getOrElse "."
-//    graphviz(path, dir / (name + format.suffix)/*Path(dir + File.separator + name + "." + format.suffix, )*/)
-//  }
 
   def graphviz(in: Path, out: Path)(implicit format: OutFormat, prog: Prog){
     exec(prog.command, in.mkString(File.separator), "-T" + format.paramT, "-o", out.mkString(File.separator))

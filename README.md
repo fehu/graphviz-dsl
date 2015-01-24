@@ -57,10 +57,10 @@ class DotExample(indent: Int) extends DotDslImpl(indent){
           )
         )
 
+    val dot = write.graph(graph)
+
     implicit def format = OutFormat.Png
     implicit def graphProg = Prog.Dot
-
-    val dot = write.graph(graph)
 
     val dotFile = File(???)
     GraphvizExec.writeAndExecGraphviz(dotFile, dot)
