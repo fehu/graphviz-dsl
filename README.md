@@ -1,7 +1,5 @@
 Swing-DSL
 ========================
-__The project is abandoned due to existence of better solutions__
-
 <i> Graphviz directed (Dot) and undirected (Fdf) markup building DSL </i>
 
 <a href="https://github.com/fehu/dsl">DSL Root project<a/>

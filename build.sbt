@@ -1,31 +1,13 @@
-import Dependencies._
-
-// // // // // // // // // // // // // // // // // // // // // // // // // // // //
-// // // // // // // // //        Project Settings       // // // // // // // // //
-// // // // // // // // // // // // // // // // // // // // // // // // // // // //
-
 organization  := "feh.dsl"
 
 name := "graphviz"
 
-version := "0.1"
+version := "0.2-SNAPSHOT"
 
-// // // // // // // // // // // // // // // // // // // // // // // // // // // //
-// // // // // // // // //         Build Settings        // // // // // // // // //
-// // // // // // // // // // // // // // // // // // // // // // // // // // // //
+crossScalaVersions := Seq("2.11.5", "2.10.4")
 
-crossScalaVersions := Seq("2.11.1", "2.10.3")
+scalaVersion := crossScalaVersions.value.head
 
-// // // // // // // // // // // // // // // // // // // // // // // // // // // //
-// // // // // // // // //      Library Dependencies     // // // // // // // // //
-// // // // // // // // // // // // // // // // // // // // // // // // // // // //
+resolvers += "Fehu's github repo" at "http://fehu.github.io/repo"
 
-libraryDependencies += feh.util
-
-// // // // // // // // // // // // // // // // // // // // // // // // // // // //
-// // // // // // // // //              Misc             // // // // // // // // //
-// // // // // // // // // // // // // // // // // // // // // // // // // // // //
-
-ideaExcludeFolders += ".idea"
-
-ideaExcludeFolders += ".idea_modules"
+libraryDependencies += "feh.util" %% "util" % "1.0.8-SNAPSHOT"

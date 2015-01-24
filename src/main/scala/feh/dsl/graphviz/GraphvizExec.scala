@@ -1,8 +1,9 @@
 package feh.dsl.graphviz
 
 import feh.util._
+import feh.util.file._
 
-trait GraphvizExec extends ExecUtils with FileUtils{
+trait GraphvizExec extends ExecUtils{
   def graphvizDirPath: Option[Path] = None
 
   def execGraphviz(path: Path)(implicit format: OutFormat, prog: Prog) {
@@ -11,22 +12,23 @@ trait GraphvizExec extends ExecUtils with FileUtils{
 
   def execGraphviz(path: Path, name: String)(implicit format: OutFormat, prog: Prog) {
     val dir = Option(path.file.getParent) getOrElse "."
-    execGraphviz(path, Path(dir + separator + name + "." + format.suffix))
+    execGraphviz(path, dir / (name + format.suffix)/*Path(dir + File.separator + name + "." + format.suffix, )*/)
   }
 
   def execGraphviz(in: Path, out: Path)(implicit format: OutFormat, prog: Prog){
-    exec(graphvizDirPath.map(_.toString + separator).getOrElse("") + prog.command, "-T" + format.graphvizTparam, s"-o$out", in)
-      .waitFor()
+    exec(List(graphvizDirPath.map(_.toString + separator).getOrElse("") + prog.command, "-T" + format.graphvizTparam, s"-o$out"), in)
+//    exec(graphvizDirPath.map(_.toString + separator).getOrElse("") + prog.command, "-T" + format.graphvizTparam, s"-o$out", in)
+//      .waitFor()
   }
 
   def readGraphviz(path: Path)(implicit format: OutFormat, prog: Prog): String = {
-    val pr = redirectingStreams(exec(graphvizDirPath.map(_.toString + separator).getOrElse("") + prog.command, "-T" + format.graphvizTparam, path))
+    val pr = redirectingStreams(exec(List(graphvizDirPath.map(_.toString + separator).getOrElse("") + prog.command, "-T" + format.graphvizTparam), path))
     pr.waitFor()
     File.read[String](pr.getInputStream)
   }
 
   def writeAndExec(path: Path, contents: String)(implicit format: OutFormat, prog: Prog){
-    file(path).withOutputStream(File.write.utf8(contents))
+    File(path).withOutputStream(File.write.utf8(contents))
     execGraphviz(path)
   }
 }
